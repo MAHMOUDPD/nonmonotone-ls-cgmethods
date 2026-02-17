@@ -1,0 +1,247 @@
+import numpy as np
+from numba import njit
+import time
+from utils import signal_func, signal_grad
+
+
+@njit
+def mDFP(n, A, b, lamda,psi, 
+               init, xs, MaxIter, NLmax, CRestart, Tolerance, delta, sigma):
+            #   options):
+    # if options['init'] == 0:
+    #     x = np.zeros(n)
+    # elif options['init'] == 1:
+    #     x = np.linalg.norm(A.T @ b, np.inf) * np.ones(n)
+    # elif options['init'] == 2:
+    #     x = A.T @ b
+    # elif options['init'] == 3:
+    #     x = np.random.randn(n)
+    # elif options['init'] == 4:
+    #     x = 2 * (np.random.rand(n) - 0.5)
+
+    # xs = options['xs']
+    if init == 0:
+        x = np.zeros(n)
+    elif init == 1:
+        x = np.linalg.norm(A.T @ b, np.inf) * np.ones(n)
+    elif init == 2:
+        x = A.T @ b
+    elif init == 3:
+        x = np.random.randn(n)
+    elif init == 4:
+        x = 2 * (np.random.rand(n) - 0.5)
+
+    x0 = x.copy()
+    Output_f = np.empty(MaxIter)
+    Output_n2re = np.empty(MaxIter + 1)
+    Output_n2re[0] = np.linalg.norm(x0 - xs) / np.linalg.norm(xs)
+
+    Nf = 1
+    Ng = 1
+    NI = 0
+
+    fk = signal_func(x0, lamda, A, b, psi)
+    gk = signal_grad(x0, lamda, A, b, psi)
+    dk = -gk
+    gkdk = np.dot(gk, dk)
+    norm_gk = np.linalg.norm(gk)
+
+    tk_try = 1.0 / (norm_gk )
+    # @njit
+    while norm_gk >= Tolerance * (1 + abs(fk)) and NI < MaxIter:
+        tk_low = 0.0
+        tk_up = 1e20
+        x1 = x0 + tk_try * dk
+        fk1 = signal_func(x1, lamda, A, b, psi)
+        Nf += 1
+        gk1 = signal_grad(x1, lamda, A, b, psi)
+        Ng += 1
+        gk1dk = np.dot(gk1, dk)
+        # sigma1 = 0.1
+        NL = 1
+
+        # while NL <= NLmax:
+        #     if fk1 > fk - delta * tk_try * np.dot(dk, dk):
+        #         tk_up = tk_try
+        #     elif gk1dk < sigma1 * gkdk:
+        #         tk_low = tk_try
+        #     else:
+        #         break
+        #     if tk_up == np.inf:
+        #         tk_try *= 2.0
+        #     else:
+        #         tk_try = 0.5 * (tk_low + tk_up)
+
+        #     x1 = x0 + tk_try * dk
+        #     fk1 = signal_func(x1, lamda, A, b, psi)
+        #     Nf += 1
+        #     gk1 = signal_grad(x1, lamda, A, b, psi)
+        #     Ng += 1
+        #     gk1dk = np.dot(gk1, dk)
+        #     NL += 1
+    
+        while NL <= NLmax:
+            if fk1 > fk + delta * tk_try * gkdk:
+                tk_up = tk_try
+            elif abs(gk1dk) > 0.5 * abs(gkdk):
+                tk_low = tk_try
+            else:
+                break
+
+            if tk_up > 1e19:
+                tk_try *= 2.0
+            else:
+                tk_try = 0.5 * (tk_low + tk_up)
+
+            x1 = x0 + tk_try * dk
+            fk1 = signal_func(x1, lamda, A, b, psi)
+            Nf += 1
+            gk1 = signal_grad(x1, lamda, A, b, psi)
+            Ng += 1
+            gk1dk = np.dot(gk1, dk)
+            NL += 1
+
+        sk = tk_try * dk
+        x1 = x0 + sk
+
+        norm_gk1 = np.linalg.norm(gk1)
+
+        rval = 0.1
+        lambdaval = 1e-20
+        yk = gk1 - gk
+        sy = max(np.dot(sk, yk), lambdaval)
+        yy = max(np.dot(yk, yk), lambdaval)
+        dk = -(rval + 1) * gk1 + (np.dot(gk1, sk) / sy) * sk + (np.dot(yk, gk1) / yy) * yk
+
+        if np.dot(dk, gk1) > -CRestart * np.linalg.norm(dk) * np.linalg.norm(gk1):
+            dk = -gk1
+
+        NI += 1
+        gk1dk1 = np.dot(gk1, dk)
+        if abs(gk1dk1) < 1e-10:
+            break
+
+        tk_try *= gkdk / gk1dk1
+
+        x0 = x1
+        gk = gk1
+        norm_gk = norm_gk1
+        fk = fk1
+        gkdk = gk1dk1
+
+        Output_f[NI - 1] = fk1
+        Output_n2re[NI] = np.linalg.norm(x0 - xs) / np.linalg.norm(xs)
+
+    xopt = x1
+    # fopt = fk
+    gopt = gk
+    TNF = Nf + 3 * Ng
+    nz_x = np.count_nonzero(xopt)
+
+    mse = np.linalg.norm(xopt - xs) / np.linalg.norm(xs)
+
+
+    return xopt, Output_f[:NI], gopt, NI, Nf, Ng, TNF, mse, nz_x,  Output_n2re[:NI+1]
+
+# @njit
+# def mDFP(n, A, b, lamda,
+#          init, xs, MaxIter, NLmax, CRestart, Tolerance, delta, sigma):
+
+#     if init == 0:
+#         x = np.zeros(n)
+#     elif init == 1:
+#         x = np.linalg.norm(A.T @ b, ord=np.inf) * np.ones(n)
+#     elif init == 2:
+#         x = A.T @ b
+#     elif init == 3:
+#         x = np.random.randn(n)
+#     elif init == 4:
+#         x = 2 * (np.random.rand(n) - 0.5)
+
+#     x0 = x.copy()
+#     Output_f = np.zeros(MaxIter)
+#     Output_n2re = np.zeros(MaxIter + 1)
+#     Output_n2re[0] = np.linalg.norm(x0 - xs) / np.linalg.norm(xs)
+
+#     Nf = 1
+#     Ng = 1
+#     NI = 0
+
+#     fk = signal_func(x0, lamda)
+#     gk = signal_grad(x0, lamda)
+#     dk = -gk
+#     gkdk = np.dot(gk, dk)
+#     norm_gk = np.linalg.norm(gk)
+#     tk_try = 1.0 / norm_gk
+
+#     while norm_gk >= Tolerance * (1 + abs(fk)) and NI < MaxIter:
+#         tk_low = 0.0
+#         tk_up = 1e20
+
+#         x1 = x0 + tk_try * dk
+#         fk1 = signal_func(x1, lamda)
+#         Nf += 1
+#         gk1 = signal_grad(x1, lamda)
+#         Ng += 1
+#         gk1dk = np.dot(gk1, dk)
+
+#         NL = 1
+#         while NL <= NLmax:
+#             if fk1 > fk + delta * tk_try * gkdk:
+#                 tk_up = tk_try
+#             elif abs(gk1dk) > 0.5 * abs(gkdk):
+#                 tk_low = tk_try
+#             else:
+#                 break
+
+#             if tk_up >= 1e20:
+#                 tk_try *= 2.0
+#             else:
+#                 tk_try = 0.5 * (tk_low + tk_up)
+
+#             x1 = x0 + tk_try * dk
+#             fk1 = signal_func(x1, lamda)
+#             Nf += 1
+#             gk1 = signal_grad(x1, lamda)
+#             Ng += 1
+#             gk1dk = np.dot(gk1, dk)
+#             NL += 1
+
+#         sk = tk_try * dk
+#         x1 = x0 + sk
+#         norm_gk1 = np.linalg.norm(gk1)
+
+#         rval = 0.1
+#         lambdaval = 1e-20
+#         yk = gk1 - gk
+#         sy = max(np.dot(sk, yk), lambdaval)
+#         yy = max(np.dot(yk, yk), lambdaval)
+
+#         dk = -(rval + 1.0) * gk1 + (np.dot(gk1, sk) / sy) * sk + (np.dot(yk, gk1) / yy) * yk
+
+#         if np.dot(dk, gk1) > -CRestart * np.linalg.norm(dk) * np.linalg.norm(gk1):
+#             dk = -gk1
+
+#         NI += 1
+#         gk1dk1 = np.dot(gk1, dk)
+#         if gk1dk1 != 0:
+#             tk_try = tk_try * gkdk / gk1dk1
+
+#         x0 = x1
+#         gk = gk1
+#         norm_gk = norm_gk1
+#         fk = fk1
+#         gkdk = gk1dk1
+
+#         Output_f[NI - 1] = fk1
+#         Output_n2re[NI] = np.linalg.norm(x0 - xs) / np.linalg.norm(xs)
+
+#     xopt = x1
+#     fopt = fk
+#     gopt = gk
+#     TNF = Nf + 3 * Ng
+#     nz_x = np.sum(xopt != 0.0)
+
+#     mse = np.linalg.norm(xopt - xs) / np.linalg.norm(xs)
+
+#     return xopt, fopt, gopt, NI, Nf, Ng, TNF, mse, nz_x, Output_f[:NI], Output_n2re[:NI+1]
