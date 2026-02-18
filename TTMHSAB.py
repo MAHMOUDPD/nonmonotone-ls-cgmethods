@@ -62,7 +62,7 @@ def TTMHSAB(n, A, b, lamda,psi,
     while norm_gk >= Tolerance * (1+abs(fk)) and NI < MaxIter:
         # Initialize parameters
         sigma = 0.75
-        delta = 1e-3
+        delta = 1e-4
         lambda_ = 0.85
         M = 10
         alpha0 = 1.0
