@@ -59,10 +59,6 @@ def NTDCG2(n, A, b, lamda,psi,
     mem_count = 0
     while norm_gk >= Tolerance * (1 + abs(fk)) and NI < MaxIter:
         # Initialize parameters
-        # sigma = 0.5
-        # delta = 1e-4
-        # lambda_ = 0.85
-
         sigma = 0.75
         delta = 1e-3
         lambda_ = 0.85
