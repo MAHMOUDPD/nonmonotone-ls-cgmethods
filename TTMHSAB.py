@@ -1,4 +1,8 @@
-
+'''
+Written by: Mahmoud M. Yahaya
+Contact address: mahmoudpd@gmail.com
+Date of last update: 06/02/2026
+'''
 import numpy as np
 from numba import njit
 import time
