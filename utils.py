@@ -1,3 +1,9 @@
+'''
+Written by: Mahmoud M. Yahaya
+Contact address: mahmoudpd@gmail.com
+Date of last update: 06/08/2025
+'''
+
 import numpy as np
 from scipy.fft import fft, ifft
 from scipy.linalg import hadamard, qr
